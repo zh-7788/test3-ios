@@ -1,0 +1,42 @@
+name: Build KeyPad dylib
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'ios/keypad.m'
+      - '.github/workflows/dylib.yml'
+
+jobs:
+  dylib:
+    runs-on: macos-15
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build arm64 dylib
+        run: |
+          set -e
+          SDK=$(xcrun --sdk iphoneos --show-sdk-path)
+          xcrun --sdk iphoneos clang \
+            -arch arm64 \
+            -dynamiclib \
+            -fobjc-arc \
+            -O2 \
+            -miphoneos-version-min=15.0 \
+            -isysroot "$SDK" \
+            -framework UIKit \
+            -framework Foundation \
+            -install_name @executable_path/Frameworks/libkeypad.dylib \
+            -o libkeypad.dylib \
+            ios/keypad.m
+          codesign -f -s - libkeypad.dylib
+          ls -l libkeypad.dylib
+          codesign -dv libkeypad.dylib 2>&1 || true
+          otool -L libkeypad.dylib
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: libkeypad
+          path: libkeypad.dylib
+          retention-days: 14
