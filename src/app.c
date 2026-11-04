@@ -28,6 +28,7 @@
 #include "tendb.h"
 #include "storycity.h"
 #include "storymovie.h"
+#include "storysel.h"
 #include "storyinfo.h"
 #include "gl.h"
 #include "hud.h"
