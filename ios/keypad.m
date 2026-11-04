@@ -166,11 +166,15 @@ static UIButton *mk_button(NSString *title, CGRect r, id target, SEL sel) {
 @end
 
 static KeyPadGesture *g_gest = nil;
+static __weak UIWindow *g_win = nil;
 
 static void install_gesture(void) {
   UIWindow *w = [UIApplication sharedApplication].windows.firstObject;
   if (!w) return;
-  g_gest = [KeyPadGesture new];
+  if (g_gest && w == g_win) return;
+  g_win = w;
+  if (!g_gest) g_gest = [KeyPadGesture new];
+  /* 三指轻点：主入口；三指长按：备用（某些界面把轻点吞掉时用） */
   UITapGestureRecognizer *t = [[UITapGestureRecognizer alloc] initWithTarget:g_gest
                                                                      action:@selector(tapped:)];
   t.numberOfTouchesRequired = 3;
@@ -178,7 +182,18 @@ static void install_gesture(void) {
   t.delaysTouchesBegan = NO;
   t.delaysTouchesEnded = NO;
   [w addGestureRecognizer:t];
+
+  UILongPressGestureRecognizer *lp =
+      [[UILongPressGestureRecognizer alloc] initWithTarget:g_gest action:@selector(tapped:)];
+  lp.numberOfTouchesRequired = 3;
+  lp.minimumPressDuration = 0.9;
+  lp.cancelsTouchesInView = NO;
+  lp.delaysTouchesBegan = NO;
+  lp.delaysTouchesEnded = NO;
+  [w addGestureRecognizer:lp];
 }
+
+static void boot(void);
 
 #pragma mark - 定位主程序并启动
 
@@ -193,16 +208,27 @@ static void *main_image_base(void) {
   return NULL;
 }
 
-__attribute__((constructor)) static void keypad_init(void) {
-  dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 2500ull * NSEC_PER_MSEC),
-                 dispatch_get_main_queue(), ^{
-    void *base = main_image_base();
-    if (!base) return;
+/* 主程序里定位 KEY_K；窗口还没建好就半秒后再来，最多 40 秒 */
+static void boot(void) {
+  void *base = main_image_base();
+  if (base && !g_keyk) {
     g_keyk = (float *)((uintptr_t)base + KEYK_OFFSET);
     cfg_load();
     apply_k();
     guard_timer();
-    install_gesture();
     NSLog(@"[keypad] ready base=%p keyk=%p k=%.2f", base, g_keyk, g_k);
-  });
+  }
+  install_gesture();
+  if (!g_gest || !g_win) {
+    static int tries = 0;
+    if (++tries < 80) {
+      dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 500ull * NSEC_PER_MSEC),
+                     dispatch_get_main_queue(), ^{ boot(); });
+    }
+  }
+}
+
+__attribute__((constructor)) static void keypad_init(void) {
+  dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 1500ull * NSEC_PER_MSEC),
+                 dispatch_get_main_queue(), ^{ boot(); });
 }
