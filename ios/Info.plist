@@ -15,7 +15,9 @@
   <key>NSLocalNetworkUsageDescription</key><string>局域网对战</string>
   <key>NSMotionUsageDescription</key><string>倾斜控制</string>
   <key>UIDeviceFamily</key><array><integer>1</integer></array>
-  <key>UILaunchStoryboardName</key><string>LaunchScreen</string>
+  <!-- iOS 14+ 的全屏启动屏：没有它（或指向不存在的 storyboard）系统会按 3:2 加黑边，
+       这就是“游戏不全屏”的根因 -->
+  <key>UILaunchScreen</key><dict/>
   <key>UIPrerenderedIcon</key><true/>
   <key>UIRequiresFullScreen</key><true/>
   <key>UIStatusBarHidden</key><true/>
