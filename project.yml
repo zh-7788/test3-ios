@@ -8,22 +8,32 @@ targets:
     type: application
     platform: iOS
     sources:
-      - ios/main.m
-      - src/*
+      - path: ios/main.m
+      - path: src
+        excludes:
+          - "main_android.c"
+          - "gk_ios.m"
+          - "main.m"
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.wmmt.port.iphone
         MARKETING_VERSION: "2.2.1"
         CURRENT_PROJECT_VERSION: "5"
         INFOPLIST_FILE: ios/Info.plist
-        CODE_SIGN_STYLE: Automatic
-        CODE_SIGN_IDENTITY: "iPhone Developer"
-        ENABLE_BITCODE: "NO"
-        OTHER_CFLAGS: -std=c11 -fno-objc-arc -D_CRT_SECURE_NO_WARNINGS
-        OTHER_LDFLAGS: -framework UIKit -framework AVFoundation -framework CoreMotion -framework AudioToolbox -framework AVFAudio
-        TARGETED_DEVICE_FAMILY: "1,2"
-        SUPPORTS_MACCATALYST: "NO"
-    resources:
-      - path: Payload/WMMT.app
-        exclude:
-          - "**/*.orig"
+        CODE_SIGN_STYLE: Manual
+        CODE_SIGN_IDENTITY: ""
+        CODE_SIGNING_REQUIRED: NO
+        CODE_SIGNING_ALLOWED: NO
+        ENABLE_BITCODE: NO
+        GCC_C_LANGUAGE_STANDARD: c11
+        OTHER_CFLAGS: "-DRC_FPT=double -DWMMT_EGL -w"
+        TARGETED_DEVICE_FAMILY: "1"
+    dependencies:
+      - sdk: UIKit.framework
+      - sdk: AVFoundation.framework
+      - sdk: CoreMotion.framework
+      - sdk: AudioToolbox.framework
+      - sdk: AVFAudio.framework
+      - sdk: OpenGLES.framework
+      - sdk: Foundation.framework
+      - sdk: libz.tbd

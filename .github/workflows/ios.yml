@@ -1,4 +1,5 @@
 name: iOS Build
+
 on:
   push:
     branches: [ main ]
@@ -12,26 +13,35 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Install xcodegen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        run: |
+          xcodegen generate
+          ls -la WMMT.xcodeproj 2>/dev/null || echo no xcodeproj
+
+      - name: Show Xcode target list
+        run: |
+          xcodebuild -list -project WMMT.xcodeproj || true
+
       - name: Build unsigned .ipa
         run: |
           set -e
           SDK=$(xcrun --sdk iphoneos --show-sdk-path)
-          CC=$(xcrun -find --sdk iphoneos clang)
-          CFLAGS='-arch arm64 -miphoneos-version-min=14.0 -O2 -Wno-unused-variable -DWMMT_EGL -DRC_FPT=double'
-          LDFLAGS='-framework UIKit -framework AVFoundation -framework CoreMotion -framework AudioToolbox -framework AVFAudio -framework OpenGLES -framework Foundation -lobjc -lz'
-          mkdir -p build/Payload/WMMT.app
-          cp -a Payload/WMMT.app/* build/Payload/WMMT.app/ 2>/dev/null || true
-          $CC $CFLAGS \
-            -Iinclude -Isrc -Isrc/phys \
-            ios/main.m src/gk_ios.m \
-            src/app.c src/render.c src/hud.c src/car.c src/collide.c \
-            src/sound.c src/sound_ios.m src/anm.c src/menu.c src/lights.c \
-            src/spark.c src/net.c src/vs_host.c src/title.c src/gk.c \
-            src/anm.c  \
-            src/phys/rc_runtime.c src/phys/phys_rc_stub.c \
-            -o build/Payload/WMMT.app/WMMT \
-            $LDFLAGS
-          # skip import of fake iOS library list
+          xcodebuild \
+            -project WMMT.xcodeproj \
+            -scheme WMMT \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -archivePath build/WMMT.xcarchive \
+            -allowProvisioningUpdates \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGN_IDENTITY="" \
+            archive
+
+          mkdir -p build/Payload
+          cp -a "build/WMMT.xcarchive/Products/Applications/WMMT.app" build/Payload/
           cd build && zip -r WMMT.ipa Payload -x '*.DS_Store'
 
       - name: Upload IPA artifact
