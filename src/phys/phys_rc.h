@@ -1,0 +1,1 @@
+#ifndef PHYS_RC_H\n#define PHYS_RC_H\n/* Placeholder: the real phys_rc.c was a recomp'd 4-MB C file from the arcade main. */\n#endif\n

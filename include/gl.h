@@ -1,1 +1,1 @@
-#ifdef __APPLE__\n#include <OpenGLES/ES2/gl.h>\n#include <OpenGLES/ES2/glext.h>\n#endif\n
+#ifdef __APPLE__\n#include <OpenGLES/ES2/gl.h>\n#include <OpenGLES/ES2/glext.h>\n#else\n#include "../src/gl.h"\n#endif\n
