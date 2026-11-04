@@ -58,14 +58,19 @@ static const rect MENU_HIDDEN = { 328, 652, 368, 56 }; /* between the left and r
  * the 1024x768 layout, which stays in the middle; the race's touch keys go out to the
  * screen's sides and grow by KEY_K about their corner there (a phone's are small). */
 static float EDGE, KEY_K = 1;
+/* A notch's or the Dynamic Island's strip (an iPhone X and later, the game full screen): the
+ * layout px it takes on the screen's left and right sides, and the home indicator's at the
+ * foot. The 3D scene goes under it; the keys, the map and the shift gate do not (hud_safe). */
+static float SAFE_L, SAFE_R, SAFE_B, WIDE_EDGE;
 enum { KEY_TOP, KEY_LEFT, KEY_RIGHT }; /* (hud.h's HUD_KEYS_*) */
 /* the player's own layout (hud_layout_set): each side's keys scaled about their corner, moved */
 static float USER_K[3] = { 1, 1, 1 }, USER_DX[3], USER_DY[3];
 
-/* a rect of a side's keys on screen, the side k times its size and moved (dx, dy) */
+/* a rect of a side's keys on screen, the side k times its size and moved (dx, dy); a phone's
+ * sides start inside the notch's strip (SAFE_L, SAFE_R) */
 static rect place(rect r, int side, float k, float dx, float dy) {
   float ox = side == KEY_LEFT ? 0 : side == KEY_RIGHT ? 1024 : 512, oy = side == KEY_TOP ? 0 : 768;
-  float ex = side == KEY_LEFT ? -EDGE : side == KEY_RIGHT ? EDGE : 0;
+  float ex = side == KEY_LEFT ? -EDGE + SAFE_L : side == KEY_RIGHT ? EDGE - SAFE_R : 0;
   k *= KEY_K;
   return (rect){ ox + ex + dx + (r.x - ox) * k, oy + dy + (r.y - oy) * k, r.w * k, r.h * k };
 }
@@ -527,7 +532,7 @@ static int plate_text_ok(void) {
 
 static void draw_plate_text(void) {
   if (!SPR[SPR_PLATE].tex || !plate_text_ok()) return;
-  float k = HUD_K, x0 = 1024 + EDGE - SPR[SPR_PLATE].w * k, y0 = INFO_Y;
+  float k = HUD_K, x0 = 1024 + EDGE - SAFE_R - SPR[SPR_PLATE].w * k, y0 = INFO_Y;
   const unsigned short *tg;
   unsigned short g[32];
   unsigned char half[32];
@@ -575,7 +580,7 @@ void hud_set_tune(int hp, int grade) {
 static void draw_plate(const car_state *car) {
   if (!SPR[SPR_PLATE].tex) return;
   glEnableVertexAttribArray(1);
-  float k = HUD_K, x0 = 1024 + EDGE - SPR[SPR_PLATE].w * k, y0 = INFO_Y;
+  float k = HUD_K, x0 = 1024 + EDGE - SAFE_R - SPR[SPR_PLATE].w * k, y0 = INFO_Y;
   blit(SPR_PLATE, x0, y0);
   blit(SPR_PILL, x0 + 20 * k, y0 + 3 * k);
   char g[3];
@@ -731,7 +736,7 @@ void hud_set_records(float record, float yours) {
   rec_yours = yours;
 }
 
-static float rx(float ax) { return 1024 + EDGE - (640 - ax) * HUD_K; }
+static float rx(float ax) { return 1024 + EDGE - SAFE_R - (640 - ax) * HUD_K; }
 
 /* m'ss"mmm in the 20x20 digits at the template's places; a dash in each without a record */
 static void draw_record(int label, float label_y, float y, float t) {
@@ -1134,7 +1139,7 @@ static void draw_info_box(int cpu, float x, int face, int name, int car_img, flo
   for (int i = 0; i < 5; ++i)
     sw[n++] = (anm_swap){ anm_sprite(T_CPU_DIGIT0 + i), text[i] == ' ' ? -1 : uv(UV_CPU_DIGIT0 + text[i] - '0') };
   const float zoom = HUD_K / 1.6f;
-  anm_draw_xf(cpu, neg ? 5 - digits : 4 + digits, 1, (1024 + EDGE - (640 - x) * HUD_K) / 1.6f, (TA_Y + 76 * HUD_K) / 1.6f,
+  anm_draw_xf(cpu, neg ? 5 - digits : 4 + digits, 1, (1024 + EDGE - SAFE_R - (640 - x) * HUD_K) / 1.6f, (TA_Y + 76 * HUD_K) / 1.6f,
               zoom, sw, n);
 }
 
@@ -1290,7 +1295,7 @@ static void draw_vs_box(int i, float gap) {
   for (int k = 0; k < 5; ++k)
     sw[n++] = (anm_swap){ anm_sprite(T_CPU_DIGIT0 + k), text[k] == ' ' ? -1 : uv(UV_CPU_DIGIT0 + text[k] - '0') };
   int frame = neg ? 5 - digits : 4 + digits;
-  const float zoom = HUD_K / 1.6f, dx = (1024 + EDGE - (640 - VS_BOX_X[i]) * HUD_K) / 1.6f, dy = (TA_Y + 60 * HUD_K) / 1.6f;
+  const float zoom = HUD_K / 1.6f, dx = (1024 + EDGE - SAFE_R - (640 - VS_BOX_X[i]) * HUD_K) / 1.6f, dy = (TA_Y + 60 * HUD_K) / 1.6f;
   anm_draw_xf(a, frame, 1, dx, dy, zoom, sw, n);
   /* the name (font 1: the menus' font 5 glyphs down to its 20-pixel cells, advances 8 and 16)
    * and the title (font 0: font 1's down to 15, advances 7 and 11), as the plate has them */
@@ -2662,9 +2667,9 @@ void hud_layout_clamp(int group, int gyro, float k, float *dx, float *dy) {
   if (group < 0 || group >= HUD_KEY_GROUPS) return;
   k = k < HUD_KEY_K_MIN ? HUD_KEY_K_MIN : k > HUD_KEY_K_MAX ? HUD_KEY_K_MAX : k;
   rect r = place(group_rect(group, gyro), group, k, *dx, *dy);
-  if (r.x + r.w > 1024 + EDGE) *dx -= r.x + r.w - (1024 + EDGE);
-  if (r.x < -EDGE) *dx += -EDGE - r.x;
-  if (r.y + r.h > 768) *dy -= r.y + r.h - 768;
+  if (r.x + r.w > 1024 + EDGE - SAFE_R) *dx -= r.x + r.w - (1024 + EDGE - SAFE_R);
+  if (r.x < -EDGE + SAFE_L) *dx += -EDGE + SAFE_L - r.x;
+  if (r.y + r.h > 768 - SAFE_B) *dy -= r.y + r.h - (768 - SAFE_B);
   if (r.y < 0) *dy -= r.y;
 }
 
@@ -2699,13 +2704,24 @@ void hud_draw_layout(float screen_w, float screen_h, int gyro, int sel) {
 }
 
 void hud_wide(float edge, float key_k) {
-  EDGE = edge;
+  EDGE = WIDE_EDGE = edge;
   KEY_K = key_k;
-  CLUSTER_X = 948 + edge;
-  SHIFT_X = 62 - edge;
+  /* the right side's parts keep off the notch's strip, the left side's too (hud_safe) */
+  CLUSTER_X = 948 + edge - SAFE_R;
+  SHIFT_X = 62 - edge + SAFE_L;
   SHIFT_Y = 530 - 0.5f * (768 - 604) * (key_k - 1); /* between the map and the bigger ◀ ▶ */
-  TA_X = -edge;
+  TA_X = -edge + SAFE_L;
   if (edge > 0) {
     PAUSE.x = 386, RESET.x = 454, CAMERA.x = 250, TRANS.x = 318;
   }
+}
+
+void hud_safe(float left, float right, float bottom) {
+  SAFE_L = left > 0 ? left : 0;
+  SAFE_R = right > 0 ? right : 0;
+  SAFE_B = bottom > 0 ? bottom : 0;
+  /* (again from hud_wide's edge, not on top of it: a turned phone may give the other side) */
+  CLUSTER_X = 948 + WIDE_EDGE - SAFE_R;
+  SHIFT_X = 62 - WIDE_EDGE + SAFE_L;
+  TA_X = -WIDE_EDGE + SAFE_L;
 }

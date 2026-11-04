@@ -7,9 +7,9 @@
   <key>CFBundleIdentifier</key><string>com.wmmt.port.iphone</string>
   <key>CFBundleName</key><string>WMMT3DX</string>
   <key>CFBundlePackageType</key><string>APPL</string>
-  <key>CFBundleShortVersionString</key><string>2.2.1</string>
+  <key>CFBundleShortVersionString</key><string>3.0.0</string>
   <key>CFBundleSupportedPlatforms</key><array><string>iPhoneOS</string></array>
-  <key>CFBundleVersion</key><string>5</string>
+  <key>CFBundleVersion</key><string>6</string>
   <key>MinimumOSVersion</key><string>14.0</string>
   <key>NSBluetoothAlwaysUsageDescription</key><string>蓝牙对战</string>
   <key>NSLocalNetworkUsageDescription</key><string>局域网对战</string>

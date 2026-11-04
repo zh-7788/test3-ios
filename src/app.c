@@ -1292,6 +1292,10 @@ void app_wide(float edge, float key_k) {
   }
 }
 
+/* The notch's strip (main.m's safe area) after app_wide: the keys, the map and the shift gate
+ * move in from the screen's sides; hud_safe does it (hud.c) */
+void app_safe(float left, float right, float bottom) { hud_safe(left, right, bottom); }
+
 int app_init(const char *data_dir, int fb_width, int fb_height, float screen_w, float screen_h) {
   char path[1100];
   G.fb_w = fb_width;
@@ -1407,6 +1411,11 @@ int app_init(const char *data_dir, int fb_width, int fb_height, float screen_w, 
   menu_init(&G.menu);
   save_open();
   G.options_global = options_load();
+#ifdef WMMT_NATIVE_SCALE
+  /* the modern build runs at the screen's own pixels unless told otherwise: a player without
+   * an option file yet sees RESOLUTION so (main.m's contentScaleFactor) */
+  if (!G.options_global) G.menu.hires = 1;
+#endif
   G.menu.hq_rows = G.hq_on;
   G.menu.res_row = !G.hq_on && !G.console; /* (an iPad's, an iPhone's: res_phone) */
   G.menu.res_phone = G.edge > 0;
@@ -1457,9 +1466,13 @@ static void hud_options(void) {
   G.hud.slide = G.menu.pedal_slide;
   G.hud.tilt = G.tilt;
   G.hud.full = (50.0f - (float)(G.menu.gyro_sens - 1) * (35.0f / 9.0f)) * 0.0174533f;
-  /* the KEY LAYOUT's (menu.c MENU_LAYOUT) */
-  for (int g = 0; g < HUD_KEY_GROUPS; ++g)
-    hud_layout_set(g, (float)G.menu.key_k[g] * 0.01f, (float)G.menu.key_dx[g], (float)G.menu.key_dy[g]);
+  /* the KEY LAYOUT's (menu.c MENU_LAYOUT): the player's, brought in again should the safe
+   * area have moved it (a turned phone, or a layout made before the notch's strip was known) */
+  for (int g = 0; g < HUD_KEY_GROUPS; ++g) {
+    float k = (float)G.menu.key_k[g] * 0.01f, dx = (float)G.menu.key_dx[g], dy = (float)G.menu.key_dy[g];
+    hud_layout_clamp(g, G.menu.gyro == HUD_STEER_GYRO, k, &dx, &dy);
+    hud_layout_set(g, k, dx, dy);
+  }
 }
 
 void app_press_start(void) {

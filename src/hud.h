@@ -47,6 +47,11 @@ void hud_lift(float dy, float left);
 /* By part (an iPhone's bigger keys): the meters, the name plate and the challenger
  * pill up (layout px), the map with its name and seconds left up, and the shift gate up. */
 void hud_lift_parts(float cluster, float plate, float pill, float map, float gate);
+/* A notch's or the Dynamic Island's strip, and the home indicator's: layout px from the
+ * screen's left, right and foot (safe-area insets turned into layout px) that no key and no
+ * HUD panel may sit in. The 3D scene still goes under it. Call after hud_wide (app_safe
+ * does, from the shell, once the insets are known); 0, 0, 0 for a screen without one. */
+void hud_safe(float left, float right, float bottom);
 /* The driver's class on the plate under the meters: 0 N .. 46 SSS (GetClass's). */
 #define HUD_CLASSES 47
 void hud_set_class(int cls);

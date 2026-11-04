@@ -10,6 +10,10 @@ void app_save_dir(const char *dir);
  * middle, edge layout px more on each side; the race's touch keys key_k times as big. It also
  * turns on the iPhone's cuts. Touches then come in the layout's px (x from -edge). */
 void app_wide(float edge, float key_k);
+/* After app_wide, once the shell knows them: the notch's or the Dynamic Island's strip and
+ * the home indicator's, in the 1024x768 layout's px (main.m: the safe area's insets times
+ * touch_k). The race's keys, the map and the shift gate keep out of it; the 3D does not. */
+void app_safe(float left, float right, float bottom);
 /* Before app_wide on a fast device (Android): no iPhone cuts though the screen is wide, the
  * maps drawn further. */
 void app_console(void);

@@ -239,6 +239,27 @@ static void *Loader(void *context) {
   }
 }
 
+/* The safe area's insets (a notch's or the Dynamic Island's strip, the home indicator's) in
+ * the 1024x768 layout's px: app_safe keeps the race's keys, the map and the shift gate out of
+ * them, while the 3D scene goes on under them. A few px of air over iOS's own. */
+- (void)applySafeArea {
+  float l = 0, r = 0, b = 0;
+  if (@available(iOS 11.0, *)) {
+    UIEdgeInsets in = self.safeAreaInsets;
+    if (touch_k > 0) l = (float)in.left * touch_k, r = (float)in.right * touch_k, b = (float)in.bottom * touch_k;
+  }
+  if (l > 0) l += 8;
+  if (r > 0) r += 8;
+  if (b > 0) b += 6;
+  app_safe(l, r, b);
+  if (l > 0 || r > 0) fprintf(stderr, "safe %.0f %.0f %.0f\n", l, r, b);
+}
+
+- (void)safeAreaInsetsDidChange {
+  [super safeAreaInsetsDidChange];
+  [self applySafeArea];
+}
+
 - (void)startGame {
   CGSize s = self.bounds.size;
   app_save_dir([SaveDir() fileSystemRepresentation]);
@@ -248,6 +269,7 @@ static void *Loader(void *context) {
   touch_edge = ((float)s.width * touch_k - 1024.0f) * 0.5f;
   if (touch_edge < 1.0f) touch_edge = 0;
   app_wide(touch_edge, touch_edge > 0 ? 1.3f : 1.0f);
+  [self applySafeArea]; /* (the notch's strip: the keys and the map keep out of it) */
   if (app_init([DataDir() fileSystemRepresentation], fb_w, fb_h, 1024, 768) != 0) {
     failed = YES;
     UIAlertView *a = [[UIAlertView alloc] initWithTitle:@"WMMT3DX"
@@ -353,6 +375,7 @@ static void *Loader(void *context) {
 - (BOOL)shouldAutorotate { return YES; }
 - (UIInterfaceOrientationMask)supportedInterfaceOrientations { return UIInterfaceOrientationMaskLandscape; }
 - (BOOL)prefersStatusBarHidden { return YES; }
+- (BOOL)prefersHomeIndicatorAutoHidden { return YES; }
 @end
 
 @interface AppDelegate : UIResponder <UIApplicationDelegate> {
