@@ -1,0 +1,39 @@
+name: iOS Build
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-14
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build unsigned .ipa (compile main.m + all source with clang)
+        run: |
+          set -e
+          SDK=$(xcrun --sdk iphoneos --show-sdk-path)
+          CC=$(xcrun -find --sdk iphoneos clang)
+          CFLAGS='-arch arm64 -miphoneos-version-min=14.0 -O2 -DWMMT_EGL'
+          LDFLAGS='-framework UIKit -framework AVFoundation -framework CoreMotion -framework AudioToolbox -framework AVFAudio -framework OpenGLES -framework Foundation -lobjc'
+          mkdir -p build/Payload/WMMT.app
+          cp -a Payload/WMMT.app/* build/Payload/WMMT.app/ 2>/dev/null || true
+          $CC $CFLAGS -Iinclude -Isrc -Isrc/phys \
+            ios/main.m \
+            src/app.c src/render.c src/hud.c src/car.c src/collide.c \
+            src/sound.c src/sound_ios.m src/anm.c src/menu.c src/lights.c \
+            src/spark.c src/net.c src/vs_host.c src/title.c src/gk.c \
+            src/phys/rc_runtime.c src/phys/phys_rc.c \
+            -o build/Payload/WMMT.app/WMMT \
+            $LDFLAGS
+          cd build && zip -r WMMT.ipa Payload -x '*.DS_Store'
+
+      - name: Upload IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: WMMT-ipa
+          path: build/WMMT.ipa
+          retention-days: 7

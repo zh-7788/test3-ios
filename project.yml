@@ -1,0 +1,29 @@
+name: WMMT
+options:
+  bundleIdPrefix: com.wmmt
+  deploymentTarget:
+    iOS: "14.0"
+targets:
+  WMMT:
+    type: application
+    platform: iOS
+    sources:
+      - ios/main.m
+      - src/*
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.wmmt.port.iphone
+        MARKETING_VERSION: "2.2.1"
+        CURRENT_PROJECT_VERSION: "5"
+        INFOPLIST_FILE: ios/Info.plist
+        CODE_SIGN_STYLE: Automatic
+        CODE_SIGN_IDENTITY: "iPhone Developer"
+        ENABLE_BITCODE: "NO"
+        OTHER_CFLAGS: -std=c11 -fno-objc-arc -D_CRT_SECURE_NO_WARNINGS
+        OTHER_LDFLAGS: -framework UIKit -framework AVFoundation -framework CoreMotion -framework AudioToolbox -framework AVFAudio
+        TARGETED_DEVICE_FAMILY: "1,2"
+        SUPPORTS_MACCATALYST: "NO"
+    resources:
+      - path: Payload/WMMT.app
+        exclude:
+          - "**/*.orig"

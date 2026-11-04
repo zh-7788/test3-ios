@@ -1,0 +1,6 @@
+﻿#ifndef STORYMOVIE_H
+#define STORYMOVIE_H
+#define STORYMOVIE_STUB 1
+#define STORYMOVIE_N 0
+#define STORYMOVIE_MAX 0
+#endif

@@ -1,0 +1,1 @@
+#ifdef __APPLE__\n#include <OpenGLES/ES2/gl.h>\n#include <OpenGLES/ES2/glext.h>\n#endif\n
