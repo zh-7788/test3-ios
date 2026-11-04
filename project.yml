@@ -29,7 +29,7 @@ targets:
         CODE_SIGNING_ALLOWED: NO
         ENABLE_BITCODE: NO
         GCC_C_LANGUAGE_STANDARD: c11
-        OTHER_CFLAGS: "-DRC_FPT=double -DWMMT_EGL -w"
+        OTHER_CFLAGS: "-DRC_FPT=double -w"
         TARGETED_DEVICE_FAMILY: "1"
     dependencies:
       - sdk: UIKit.framework
