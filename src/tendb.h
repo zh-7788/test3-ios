@@ -26,4 +26,12 @@ static const short TENDB[TENDB_NROWS][TENDB_NCANDS] = {
   { 2844, 2329, 3878, 3890, 3253, 5591, 5596, 4741, 5592, 5597 },
 };
 
+
+/* The 10-in-a-row's pre-race page (menu.c draw_pre_ten): per course and level its
+ * background, name, time zone and start ramp sprites, and the level's template. The arcade's
+ * own data is not in this tree, so they read sprite 0 and the page draws its layout empty. */
+#define TENDB_NCOURSES 16
+#define TENDB_NLEVELS 8
+static const int TENDB_PRE[TENDB_NCOURSES][TENDB_NLEVELS][4];
+static const int TENDB_PRE_LV[TENDB_NLEVELS];
 #endif
