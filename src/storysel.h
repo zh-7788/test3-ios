@@ -1,4 +1,4 @@
-﻿#ifndef STORYSEL_H
+#ifndef STORYSEL_H
 #define STORYSEL_H
 
 /* The story select's tables (menu.c): the tuner and the episode's picture per chapter and
@@ -15,6 +15,10 @@ static const int STORYSEL_TUNER[STORYSEL_TUNERS];
 static const int STORYSEL_LEVEL[STORYSEL_DIVISIONS][2];
 static const int STORYSEL_IMAGE[STORYSEL_ROWS][2];
 static const int STORYSEL_RAMP[STORYSEL_ROWS];
+
+/* the story races whose finish fades, one a select: app.c's menu_finish_story */
+#define STORYRACE_SELECTS 0
+static const int STORYRACE_FADE[1][5];
 
 #define STORYSEL_TEXT 0x2e00      /* the chapter's title, one a chapter */
 #define STORYSEL_START_RAMP 0x2e40

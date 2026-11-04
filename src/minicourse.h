@@ -8,7 +8,8 @@
 #define MINI_VS_CARDS 9
 
 typedef struct {
-  int map, course, marks, gradation, run, cam;       /* object indices in the pack */
+  int map, course, marks, gradation, cam;            /* object indices in the pack */
+  float run[MINI_FRAMES][3];                          /* the run light's places, a frame */
   const char *cam_name, *aim_name;                   /* data/menu3d/course/<name>.igb */
   /* the gradation's u runs 0..1 over 3 s, the run light rides at its key: 60 Hz each */
   float gradation_u[MINI_FRAMES];
