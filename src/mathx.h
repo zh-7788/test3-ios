@@ -1,11 +1,20 @@
-/* Small column-major 4x4 matrix helpers (OpenGL convention). */
-#ifndef MATHX_H
+﻿#ifndef MATHX_H
 #define MATHX_H
 
 #include <math.h>
 #include <string.h>
 
 typedef struct { float m[16]; } mat4;
+
+#ifndef __cplusplus
+#if !defined(__clang__) || __STDC_VERSION__ >= 202311L
+#define MATHX_HAS_TYPEOF 1
+#endif
+#endif
+
+#ifndef MATHX_HAS_TYPEOF
+#define typeof __typeof__
+#endif
 
 static inline mat4 mat4_identity(void) {
   mat4 r;
@@ -48,7 +57,7 @@ static inline mat4 mat4_ortho(float l, float r_, float b, float t, float n, floa
   return r;
 }
 
-/* glFrustum's */
+/* glFrustum''s */
 static inline mat4 mat4_frustum(float l, float r_, float b, float t, float n, float f) {
   mat4 m = { { 0 } };
   m.m[0] = 2.0f * n / (r_ - l);
@@ -111,3 +120,4 @@ static inline mat4 mat4_body(const float *pos, float yaw, float pitch, float rol
 }
 
 #endif
+
