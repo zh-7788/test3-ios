@@ -30,7 +30,9 @@ targets:
         ENABLE_BITCODE: NO
         GCC_C_LANGUAGE_STANDARD: c11
         CLANG_ENABLE_OBJC_ARC: NO
-        OTHER_CFLAGS: "-DRC_FPT=double -w"
+        # 与 build.sh 一致：物理的浮点不能被 FMA 合并（bit-for-bit 对齐街机），优化取 -O2
+        OTHER_CFLAGS: "-DRC_FPT=double -w -ffp-contract=off"
+        GCC_OPTIMIZATION_LEVEL: 2
         TARGETED_DEVICE_FAMILY: "1"
     dependencies:
       - sdk: UIKit.framework
