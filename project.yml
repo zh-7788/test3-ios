@@ -14,6 +14,9 @@ targets:
           - "main_android.c"
           - "gk_ios.m"
           - "main.m"
+          - "vkgl.c"
+          - "vkgl.h"
+          - "gk_ios.h"
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.wmmt.port.iphone
