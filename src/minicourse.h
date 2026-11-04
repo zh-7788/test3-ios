@@ -1,4 +1,4 @@
-﻿#ifndef MINICOURSE_H
+#ifndef MINICOURSE_H
 #define MINICOURSE_H
 /* from tools/stage/pack_mini.py's pack (data/minicourse.wpk): the course selects' 3D
  * miniature, one card per course, running its own camera, marks, gradation and run light. */
@@ -14,6 +14,12 @@ typedef struct {
   float gradation_u[MINI_FRAMES];
   float run_pos[MINI_FRAMES][3];
   int macula;                                        /* marks' object or -1 */
+  /* what the card shows when its pack is loaded: its camera and aim, the gradation's
+   * shift a frame, and the run light's object */
+  int on;
+  float eye[3], at[3];
+  float uv[MINI_FRAMES];
+  int runlight;
 } mini_course;
 
 static const mini_course MINI_TA[MINI_TA_CARDS] = { 0 };
