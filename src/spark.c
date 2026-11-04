@@ -155,8 +155,8 @@ static void create(int k, const car_effect *e) {
   if (len > 0)
     for (int j = 0; j < 3; ++j) dn[j] = e->dir[j] / len;
   for (int i = 0; i < n; ++i) {
-    const float *r = SPARK_RAND[i % 4][S.rand_at];
-    S.rand_at = S.rand_at + 1 > 99 ? 0 : S.rand_at + 1;
+    const float *r = SPARK_RAND[i % 4][S.rand_at % 99];
+    S.rand_at = (S.rand_at + 1) % 99;
     float v[3] = { 2.0f * (2.0f * r[0] + dn[0]), 2.0f * r[1] + dn[1], 2.0f * (2.0f * r[2] + dn[2]) };
     spark *s = NULL;
     for (int j = 0; j < SPARK_MAX && !s; ++j)
