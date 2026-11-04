@@ -1,5 +1,7 @@
-/* gk.h off iOS (the harness): no Bluetooth, nothing found. */
-#ifndef __APPLE__
+/* gk.h off iOS (the harness): no Bluetooth, nothing found.
+ * On this build it stands in for gk_ios.m too: GKSession's Bluetooth peer-to-peer no longer
+ * exists on the iOS versions this port targets, so the versus screen finds no games. */
+#if 1
 #include "gk.h"
 
 int gk_host(const char *name) { return (void)name, -1; }
