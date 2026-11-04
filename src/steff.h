@@ -1,4 +1,4 @@
-﻿#ifndef STEFF_H
+#ifndef STEFF_H
 #define STEFF_H
 
 #include <stddef.h>
@@ -38,6 +38,8 @@ static const steff_row STEFF_POWER_NA_TABLE[STEFF_LEVELS] = { { 0 } };
 static const steff_row STEFF_MID_UCF10_TABLE[10] = { { 0 } };
 static const steff_row STEFF_MIDTABLE[10] = { { 0 } };
 static const steff_row STEFF_TOPTABLE[1] = { { 0 } };
+/* the power tuning-effort rows, one a level (menu.c's draw_eff) */
+static const steff_row STEFF_POWER[10] = { { 0 } };
 #define STEFF_CAR STEFF_CAR_PLACEHOLDER
 
 /* the tuning scene''s camera poses ([after][pose&7]): rotation x,y,z + place + eye */
@@ -48,7 +50,8 @@ static const float STEFF_POSE[STEFF_POSES][STEFF_POSE_ROWS][6] = { { { 0 } }, { 
 /* sprite id bases for the effort screen; the faces follow the last T_EFF id */
 enum { STEFF_TEXT = 0xa70, STEFF_ANIM = 0x240 };
 enum { STEFF_COMPLETE0 = 0xa80 };
-#define STEFF_COMPLETE(c) (STEFF_COMPLETE0 + ((c) & 31))
+/* the effect screen's 装着完了! template, one a level */
+static const int STEFF_COMPLETE[32];
 
 #endif
 
