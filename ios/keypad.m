@@ -25,8 +25,10 @@ static float *g_keyk = NULL;
 static float *g_edgep = NULL;
 
 static float g_k = 1.0f;
-static float g_edge = 320.0f;    /* 目标 EDGE（画布像素） */
+static float g_edge = 480.0f;    /* 目标 EDGE（画布像素） */
 static float g_raw = 0.0f;       /* 游戏自己算出来的 EDGE */
+static float g_e0 = 0.0f;        /* 启动时的原始 EDGE（触摸换算基准） */
+static BOOL g_e0_ok = NO;
 static UIView *g_panel = nil;
 static UILabel *g_val = NULL, *g_edgev = NULL, *g_debug = NULL;
 
@@ -81,13 +83,47 @@ static void guard_timer(void) {
   dispatch_source_set_event_handler(t, ^{
     if (g_keyk && *g_keyk != g_k) *g_keyk = g_k;
     if (g_edgep && *g_edgep != g_edge) {
-      if (fabsf(*g_edgep - g_edge) > 0.5f) g_raw = *g_edgep;
+      if (fabsf(*g_edgep - g_edge) > 0.5f) {
+        g_raw = *g_edgep;
+        g_e0 = g_raw; g_e0_ok = YES;   /* 游戏重算过布局，更新触摸换算基准 */
+      }
       *g_edgep = g_edge;
       if (g_debug)
-        g_debug.text = [NSString stringWithFormat:@"原 EDGE %.0f   实际 %.0f", g_raw, g_edge];
+        g_debug.text = [NSString stringWithFormat:@"原 EDGE %.0f   实际 %.0f", g_e0, g_edge];
     }
   });
   dispatch_resume(t);
+}
+
+#pragma mark - 触摸坐标补偿
+//
+// 游戏在 GLView 里用 self.touch_edge（画布扩展量）把屏幕点换算成画布坐标：
+//   world = px * k - touch_edge
+// 我们把全局 EDGE 改成 g_edge 后，绘制按新的 [-E1, 1024+E1] 铺开，
+// 但触摸仍按旧的 E0 换算，两者会越差越远。屏幕点按比例缩放即可精确对齐：
+//   S' = S * (1024 + 2*E1) / (1024 + 2*E0)
+// 只对 GLView 生效，菜单按钮走 UIKit，不受影响。
+
+static IMP g_orig_loc = NULL;
+
+static CGPoint kp_locationInView(id self, SEL _cmd, UIView *view) {
+  CGPoint p = ((CGPoint (*)(id, SEL, UIView *))g_orig_loc)(self, _cmd, view);
+  if (view && g_e0_ok && fabsf(g_edge - g_e0) > 1.0f) {
+    static Class glv = Nil;
+    if (!glv) glv = NSClassFromString(@"GLView");
+    if (glv && [view isKindOfClass:glv]) {
+      float f = (1024.0f + 2.0f * g_edge) / (1024.0f + 2.0f * g_e0);
+      p.x *= f;   /* 只有水平方向被拉伸，纵向 0..768 不变 */
+    }
+  }
+  return p;
+}
+
+static void install_touch_fix(void) {
+  Method m = class_getInstanceMethod([UITouch class], @selector(locationInView:));
+  if (!m || g_orig_loc) return;
+  g_orig_loc = method_getImplementation(m);
+  method_setImplementation(m, (IMP)kp_locationInView);
 }
 
 #pragma mark - 面板
@@ -256,8 +292,10 @@ static void boot(void) {
     g_edgep = (float *)((uintptr_t)base + EDGE_OFF);
     g_raw = *g_edgep;
     cfg_load();
+    g_e0 = g_raw; g_e0_ok = YES;
     apply_all();
     guard_timer();
+    install_touch_fix();
     NSLog(@"[keypad] base=%p k=%.2f edge=%.0f raw=%.0f", base, g_k, g_edge, g_raw);
   }
   install_gesture();
