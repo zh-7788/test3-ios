@@ -1,13 +1,15 @@
-// keypad.m —— 注入到 WMMT 可执行文件的按键布局补丁（dylib）
+// keypad.m —— 注入到 WMMT 可执行文件的布局补丁（dylib）
 //
-// 两条链路：
-//  大小：主程序里 _KEY_K 是个全局 float（初值 1.0），hud_touch 判命中、hud_draw 画按键都读它，
-//        运行时改这个变量，按键整体缩放，命中区域同步跟着变。
-//  位置：可执行文件被 patch_pos.py 改过一处 —— 按键矩阵上传前跳进代码洞，
-//        把 m[12]/m[13] 加上 (dx, dy)（NDC 单位）。触摸这边用 swizzle
-//        -[UITouch locationInView:] 把坐标反向平移同样的点数，两边严丝合缝。
+// 两个全局，运行时直接改，绘制和触摸判定读的是同一份数据，所以永远同步：
+//   _KEY_K  @0x556040  按键缩放，1.0 为原大
+//   _EDGE   @0x584818  画布左右扩展量（hud_wide 写一次）
 //
-// 交互：三指轻点屏幕 -> 面板；大小 +/-，位置四向微调，实时生效，
+// EDGE 决定 HUD 的水平铺开程度：按键坐标是固定的（16 / 812 这类常量），
+// 投影把画布 [-EDGE, 1024+EDGE] 铺满整屏。EDGE 越大，按键越往中间收。
+// 全屏后 EDGE 被算得很大，按键被顶到屏幕边缘，这版把它固定在指定值，
+// 让按键回到接近 4:3 letterbox 时的位置。
+//
+// 交互：三指轻点（或三指长按 0.9s）唤出面板，调大小 / 内收，实时生效，
 //       自动写回 Documents/keylayout.txt。
 
 #import <UIKit/UIKit.h>
@@ -16,18 +18,17 @@
 #import <mach-o/loader.h>
 #import <mach/mach.h>
 
-#define KEYK_OFF   0x556040ULL  /* _KEY_K           */
-#define POSDAT_OFF 0x672D40ULL  /* dx_ndc, dy_ndc   */
-#define SITE_OFF   0x37214ULL   /* 被改成 b 代码洞的那条指令 */
-#define SITE_B_PATCH 0x17FF2F7BUL
+#define KEYK_OFF 0x556040ULL
+#define EDGE_OFF 0x584818ULL
 
 static float *g_keyk = NULL;
-static float *g_pos = NULL;   /* [0]=dx_ndc [1]=dy_ndc */
-static BOOL g_patched = NO;
+static float *g_edgep = NULL;
 
-static float g_k = 1.0f, g_dx = 0.0f, g_dy = 0.0f;
+static float g_k = 1.0f;
+static float g_edge = 320.0f;    /* 目标 EDGE（画布像素） */
+static float g_raw = 0.0f;       /* 游戏自己算出来的 EDGE */
 static UIView *g_panel = nil;
-static UILabel *g_val = NULL, *g_posv = NULL;
+static UILabel *g_val = NULL, *g_edgev = NULL, *g_debug = NULL;
 
 #pragma mark - 存档
 
@@ -46,22 +47,17 @@ static void cfg_load(void) {
     if ([line hasPrefix:@"k="]) {
       float v = [[line substringFromIndex:2] floatValue];
       if (v >= 0.6f && v <= 1.6f) g_k = v;
-    } else if ([line hasPrefix:@"dx="]) {
-      g_dx = [[line substringFromIndex:3] floatValue];
-    } else if ([line hasPrefix:@"dy="]) {
-      g_dy = [[line substringFromIndex:3] floatValue];
+    } else if ([line hasPrefix:@"e="]) {
+      float v = [[line substringFromIndex:2] floatValue];
+      if (v >= 0.0f && v <= 1000.0f) g_edge = v;
     }
   }
-  if (g_dx < -0.5f) g_dx = -0.5f;
-  if (g_dx > 0.5f) g_dx = 0.5f;
-  if (g_dy < -0.5f) g_dy = -0.5f;
-  if (g_dy > 0.5f) g_dy = 0.5f;
 }
 
 static void cfg_save(void) {
   NSString *p = cfg_path();
   if (!p) return;
-  NSString *s = [NSString stringWithFormat:@"k=%.3f\ndx=%.3f\ndy=%.3f\n", g_k, g_dx, g_dy];
+  NSString *s = [NSString stringWithFormat:@"k=%.3f\ne=%.1f\n", g_k, g_edge];
   [s writeToFile:p atomically:YES encoding:NSUTF8StringEncoding error:NULL];
 }
 
@@ -69,57 +65,29 @@ static void cfg_save(void) {
 
 static void apply_all(void) {
   if (g_keyk) *g_keyk = g_k;
-  if (g_pos && g_patched) {
-    g_pos[0] = g_dx;
-    g_pos[1] = g_dy;
-  }
+  if (g_edgep) *g_edgep = g_edge;
   if (g_val) g_val.text = [NSString stringWithFormat:@"%.2f", g_k];
-  if (g_posv) g_posv.text = [NSString stringWithFormat:@"%+.2f %+.2f", g_dx, g_dy];
+  if (g_edgev) g_edgev.text = [NSString stringWithFormat:@"%.0f", g_edge];
+  if (g_debug)
+    g_debug.text = [NSString stringWithFormat:@"原 EDGE %.0f   实际 %.0f", g_raw, g_edge];
 }
 
-/* 游戏在窗口尺寸变化时会用 hud_wide 把 KEY_K 写回 1.0，这里每半秒守一次 */
+/* 游戏在窗口尺寸变化时会重算 KEY_K / EDGE，这里持续守护 */
 static void guard_timer(void) {
   dispatch_source_t t = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0,
                                                dispatch_get_main_queue());
   dispatch_source_set_timer(t, dispatch_time(DISPATCH_TIME_NOW, 0),
-                            500ull * NSEC_PER_MSEC, 50ull * NSEC_PER_MSEC);
+                            400ull * NSEC_PER_MSEC, 50ull * NSEC_PER_MSEC);
   dispatch_source_set_event_handler(t, ^{
     if (g_keyk && *g_keyk != g_k) *g_keyk = g_k;
-    if (g_pos && g_patched && (g_pos[0] != g_dx || g_pos[1] != g_dy)) {
-      g_pos[0] = g_dx;
-      g_pos[1] = g_dy;
+    if (g_edgep && *g_edgep != g_edge) {
+      if (fabsf(*g_edgep - g_edge) > 0.5f) g_raw = *g_edgep;
+      *g_edgep = g_edge;
+      if (g_debug)
+        g_debug.text = [NSString stringWithFormat:@"原 EDGE %.0f   实际 %.0f", g_raw, g_edge];
     }
   });
   dispatch_resume(t);
-}
-
-#pragma mark - 触摸坐标同步平移
-
-static IMP g_orig_loc = NULL;
-
-static BOOL fullscreen_view(UIView *v) {
-  if (!v) return NO;
-  UIWindow *w = v.window ?: [UIApplication sharedApplication].windows.firstObject;
-  if (!w) return NO;
-  CGSize a = v.bounds.size, b = w.bounds.size;
-  return a.width >= b.width * 0.9f && a.height >= b.height * 0.9f;
-}
-
-static CGPoint kp_locationInView(id self, SEL _cmd, UIView *view) {
-  CGPoint p = ((CGPoint (*)(id, SEL, UIView *))g_orig_loc)(self, _cmd, view);
-  if ((g_dx != 0 || g_dy != 0) && fullscreen_view(view)) {
-    CGSize s = view.bounds.size;
-    p.x -= g_dx * (float)s.width * 0.5f;   /* dx>0 键右移 -> 触点左移回来 */
-    p.y += g_dy * (float)s.height * 0.5f;  /* dy>0 键上移 -> 触点下移回来 */
-  }
-  return p;
-}
-
-static void install_touch_shift(void) {
-  Method m = class_getInstanceMethod([UITouch class], @selector(locationInView:));
-  if (!m) return;
-  g_orig_loc = method_getImplementation(m);
-  method_setImplementation(m, (IMP)kp_locationInView);
 }
 
 #pragma mark - 面板
@@ -129,7 +97,7 @@ static UIButton *mk_button(NSString *title, CGRect r, id target, SEL sel) {
   b.frame = r;
   [b setTitle:title forState:UIControlStateNormal];
   [b setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
-  b.titleLabel.font = [UIFont boldSystemFontOfSize:21];
+  b.titleLabel.font = [UIFont boldSystemFontOfSize:24];
   b.backgroundColor = [UIColor colorWithWhite:1.0 alpha:0.16];
   b.layer.cornerRadius = 10;
   [b addTarget:target action:sel forControlEvents:UIControlEventTouchUpInside];
@@ -150,24 +118,10 @@ static UIButton *mk_button(NSString *title, CGRect r, id target, SEL sel) {
   cfg_save();
 }
 
-+ (void)pos_step:(UIButton *)b {
-  const float st = 0.02f;
-  switch (b.tag) {
-    case 0: g_dx += st; break;   /* → */
-    case 1: g_dx -= st; break;   /* ← */
-    case 2: g_dy += st; break;   /* ↑ */
-    default: g_dy -= st; break;  /* ↓ */
-  }
-  if (g_dx < -0.5f) g_dx = -0.5f;
-  if (g_dx > 0.5f) g_dx = 0.5f;
-  if (g_dy < -0.5f) g_dy = -0.5f;
-  if (g_dy > 0.5f) g_dy = 0.5f;
-  apply_all();
-  cfg_save();
-}
-
-+ (void)pos_reset:(UIButton *)b {
-  g_dx = g_dy = 0;
++ (void)edge_step:(UIButton *)b {
+  g_edge += (b.tag == 1 ? 40.0f : -40.0f);
+  if (g_edge < 0.0f) g_edge = 0.0f;
+  if (g_edge > 900.0f) g_edge = 900.0f;
   apply_all();
   cfg_save();
 }
@@ -187,59 +141,57 @@ static UIButton *mk_button(NSString *title, CGRect r, id target, SEL sel) {
   if (!w) return;
 
   CGRect f = w.bounds;
-  CGFloat pw = 320, ph = 248;
+  CGFloat pw = 340, ph = 236;
   g_panel = [[UIView alloc] initWithFrame:CGRectMake((f.size.width - pw) / 2,
                                                     (f.size.height - ph) / 2, pw, ph)];
-  g_panel.backgroundColor = [UIColor colorWithWhite:0.08 alpha:0.88];
+  g_panel.backgroundColor = [UIColor colorWithWhite:0.08 alpha:0.9];
   g_panel.layer.cornerRadius = 18;
   g_panel.autoresizingMask = UIViewAutoresizingFlexibleLeftMargin |
                              UIViewAutoresizingFlexibleRightMargin |
                              UIViewAutoresizingFlexibleTopMargin |
                              UIViewAutoresizingFlexibleBottomMargin;
 
-  UILabel *t1 = [[UILabel alloc] initWithFrame:CGRectMake(0, 10, pw, 22)];
+  UILabel *t1 = [[UILabel alloc] initWithFrame:CGRectMake(0, 8, pw, 20)];
   t1.text = @"按键大小";
   t1.textColor = [UIColor colorWithWhite:0.75 alpha:1];
   t1.textAlignment = NSTextAlignmentCenter;
   t1.font = [UIFont boldSystemFontOfSize:15];
   [g_panel addSubview:t1];
 
-  UIButton *minus = mk_button(@"−", CGRectMake(24, 34, 64, 46), [KeyPadPanel class], @selector(size_step:));
+  UIButton *minus = mk_button(@"−", CGRectMake(24, 30, 68, 50), [KeyPadPanel class], @selector(size_step:));
   minus.tag = 0;
-  UIButton *plus = mk_button(@"+", CGRectMake(pw - 88, 34, 64, 46), [KeyPadPanel class], @selector(size_step:));
+  UIButton *plus = mk_button(@"+", CGRectMake(pw - 92, 30, 68, 50), [KeyPadPanel class], @selector(size_step:));
   plus.tag = 1;
-  g_val = [[UILabel alloc] initWithFrame:CGRectMake(92, 34, pw - 184, 46)];
+  g_val = [[UILabel alloc] initWithFrame:CGRectMake(96, 30, pw - 192, 50)];
   g_val.textColor = [UIColor colorWithRed:1.0 green:0.62 blue:0.1 alpha:1];
   g_val.textAlignment = NSTextAlignmentCenter;
-  g_val.font = [UIFont monospacedDigitSystemFontOfSize:24 weight:UIFontWeightBold];
+  g_val.font = [UIFont monospacedDigitSystemFontOfSize:26 weight:UIFontWeightBold];
 
-  UILabel *t2 = [[UILabel alloc] initWithFrame:CGRectMake(0, 88, pw, 22)];
-  t2.text = @"按键位置";
+  UILabel *t2 = [[UILabel alloc] initWithFrame:CGRectMake(0, 90, pw, 20)];
+  t2.text = @"按键内收（越大越靠中间）";
   t2.textColor = [UIColor colorWithWhite:0.75 alpha:1];
   t2.textAlignment = NSTextAlignmentCenter;
   t2.font = [UIFont boldSystemFontOfSize:15];
   [g_panel addSubview:t2];
 
-  UIButton *up = mk_button(@"↑", CGRectMake(pw / 2 - 32, 112, 64, 42), [KeyPadPanel class], @selector(pos_step:));
-  up.tag = 2;
-  UIButton *down = mk_button(@"↓", CGRectMake(pw / 2 - 32, 158, 64, 42), [KeyPadPanel class], @selector(pos_step:));
-  down.tag = 3;
-  UIButton *left = mk_button(@"←", CGRectMake(pw / 2 - 106, 135, 64, 42), [KeyPadPanel class], @selector(pos_step:));
-  left.tag = 1;
-  UIButton *right = mk_button(@"→", CGRectMake(pw / 2 + 42, 135, 64, 42), [KeyPadPanel class], @selector(pos_step:));
-  right.tag = 0;
+  UIButton *eminus = mk_button(@"−", CGRectMake(24, 112, 68, 50), [KeyPadPanel class], @selector(edge_step:));
+  eminus.tag = 0;
+  UIButton *eplus = mk_button(@"+", CGRectMake(pw - 92, 112, 68, 50), [KeyPadPanel class], @selector(edge_step:));
+  eplus.tag = 1;
+  g_edgev = [[UILabel alloc] initWithFrame:CGRectMake(96, 112, pw - 192, 50)];
+  g_edgev.textColor = [UIColor colorWithRed:0.4 green:0.85 blue:1.0 alpha:1];
+  g_edgev.textAlignment = NSTextAlignmentCenter;
+  g_edgev.font = [UIFont monospacedDigitSystemFontOfSize:26 weight:UIFontWeightBold];
 
-  g_posv = [[UILabel alloc] initWithFrame:CGRectMake(14, 204, 120, 24)];
-  g_posv.textColor = [UIColor colorWithWhite:0.8 alpha:1];
-  g_posv.textAlignment = NSTextAlignmentLeft;
-  g_posv.font = [UIFont monospacedDigitSystemFontOfSize:13 weight:UIFontWeightRegular];
+  g_debug = [[UILabel alloc] initWithFrame:CGRectMake(0, 168, pw, 22)];
+  g_debug.textColor = [UIColor colorWithWhite:0.6 alpha:1];
+  g_debug.textAlignment = NSTextAlignmentCenter;
+  g_debug.font = [UIFont monospacedDigitSystemFontOfSize:13 weight:UIFontWeightRegular];
 
-  UIButton *zero = mk_button(@"归零", CGRectMake(146, 200, 76, 34), [KeyPadPanel class], @selector(pos_reset:));
-  zero.titleLabel.font = [UIFont boldSystemFontOfSize:15];
-  UIButton *done = mk_button(@"完成", CGRectMake(230, 200, 76, 34), [KeyPadPanel class], @selector(close:));
-  done.titleLabel.font = [UIFont boldSystemFontOfSize:15];
+  UIButton *done = mk_button(@"完成", CGRectMake(pw / 2 - 44, 194, 88, 34), [KeyPadPanel class], @selector(close:));
+  done.titleLabel.font = [UIFont boldSystemFontOfSize:16];
 
-  for (UIView *v in @[ minus, plus, g_val, t2, up, down, left, right, g_posv, zero, done ])
+  for (UIView *v in @[ minus, plus, g_val, t2, eminus, eplus, g_edgev, g_debug, done ])
     [g_panel addSubview:v];
   [w addSubview:g_panel];
   apply_all();
@@ -301,15 +253,12 @@ static void boot(void) {
   void *base = main_image_base();
   if (base && !g_keyk) {
     g_keyk = (float *)((uintptr_t)base + KEYK_OFF);
-    uint32_t site = *(uint32_t *)((uintptr_t)base + SITE_OFF);
-    g_patched = (site == SITE_B_PATCH);
-    if (g_patched) g_pos = (float *)((uintptr_t)base + POSDAT_OFF);
+    g_edgep = (float *)((uintptr_t)base + EDGE_OFF);
+    g_raw = *g_edgep;
     cfg_load();
     apply_all();
     guard_timer();
-    install_touch_shift();
-    NSLog(@"[keypad] base=%p k=%.2f dx=%.3f dy=%.3f patched=%d",
-          base, g_k, g_dx, g_dy, (int)g_patched);
+    NSLog(@"[keypad] base=%p k=%.2f edge=%.0f raw=%.0f", base, g_k, g_edge, g_raw);
   }
   install_gesture();
   if (!g_gest || !g_win) {
